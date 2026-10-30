@@ -5,10 +5,11 @@
 #include <linux/ktime.h>
 #include <linux/slab.h>
 #include <linux/list.h>
+#include <linux/bug.h>
 #include "hello1.h"
 
 MODULE_AUTHOR("Vlad");
-MODULE_DESCRIPTION("Hello base module with ktime and list");
+MODULE_DESCRIPTION("Hello base module with BUG_ON and kmalloc fail");
 MODULE_LICENSE("GPL");
 
 struct hello_time {
@@ -25,16 +26,21 @@ int print_hello(unsigned int count)
         struct hello_time *ptr;
         struct hello_time *md, *tmp;
 
+        BUG_ON(count > 10);
+
         if (count == 0 || (count >= 5 && count <= 10)) {
                 pr_warn("Warning: count is %u (expected 1-4)\n", count);
-        } else if (count > 10) {
-                pr_err("Error: count %u is greater than 10\n", count);
-                return -EINVAL;
         }
 
         for (i = 0; i < count; i++) {
                 ptr = kmalloc(sizeof(*ptr), GFP_KERNEL);
+                
+                if (i == 4) {
+                        ptr = NULL; 
+                }
+
                 if (!ptr) {
+                        pr_err("Memory allocation failed on iteration %u\n", i);
                         list_for_each_entry_safe(md, tmp, &hello_list, list) {
                                 list_del(&md->list);
                                 kfree(md);
@@ -64,10 +70,7 @@ static void __exit hello1_exit(void)
         struct hello_time *md, *tmp;
 
         list_for_each_entry_safe(md, tmp, &hello_list, list) {
-                pr_info("Time spent: start = %lld ns, end = %lld ns, duration = %lld ns\n",
-                        ktime_to_ns(md->start_time),
-                        ktime_to_ns(md->end_time),
-                        ktime_to_ns(ktime_sub(md->end_time, md->start_time)));
+                pr_info("Time spent: %lld ns\n", ktime_to_ns(ktime_sub(md->end_time, md->start_time)));
                 list_del(&md->list);
                 kfree(md);
         }
